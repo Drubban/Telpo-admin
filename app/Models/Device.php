@@ -20,7 +20,7 @@ class Device extends Model
     // token_hash, install_id y status no son asignables en masa: solo el codigo los define.
     protected $fillable = ['imei', 'unit_number', 'label', 'serial', 'model', 'app_version'];
 
-    protected $hidden = ['token_hash'];
+    protected $hidden = ['token_hash', 'temp_secret'];
 
     protected function casts(): array
     {
@@ -32,6 +32,10 @@ class Device extends Model
             'enrolled_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'bump_stats_at' => 'datetime',
+            'usage_breakdown' => 'array',
+            'usage_breakdown_at' => 'datetime',
+            'signal_checked_at' => 'datetime',
+            'temp_secret' => 'encrypted',
             'billing_app_installed' => 'boolean',
             'billing_app_checked_at' => 'datetime',
         ];
@@ -123,6 +127,13 @@ class Device extends Model
             $query->where(function (Builder $w) {
                 $w->where('devices.nfc_enabled', false)->orWhere('devices.camera_ok', false);
             });
+        }
+
+        // Semaforo de red en amarillo o rojo (>= 1) en datos moviles o en Wi-Fi.
+        if (($f['signal'] ?? null) === 'mobile') {
+            $query->where('devices.signal_mobile', '>=', 1);
+        } elseif (($f['signal'] ?? null) === 'wifi') {
+            $query->where('devices.signal_wifi', '>=', 1);
         }
 
         return $query;

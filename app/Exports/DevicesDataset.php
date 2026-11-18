@@ -30,7 +30,7 @@ class DevicesDataset implements ExportDataset
 
     public function headings(): array
     {
-        return ['Unidad', 'IMEI', 'Etiqueta', 'Serie', 'Estado', 'En línea', 'Última conexión', 'NFC', 'Cámara/QR', 'Versión app', 'App de cobro', 'Consumo periodo (MB)'];
+        return ['Unidad', 'IMEI', 'Etiqueta', 'Serie', 'Teléfono', 'Estado', 'En línea', 'Última conexión', 'NFC', 'Cámara/QR', 'Versión app', 'App de cobro', 'Consumo periodo (MB)'];
     }
 
     private function query(): Builder
@@ -58,6 +58,7 @@ class DevicesDataset implements ExportDataset
                 $d->imei,
                 $d->label,
                 $d->serial,
+                $d->phone_number,
                 ['active' => 'Activo', 'inactive' => 'Inactivo', 'released' => 'Liberado'][$d->status] ?? $d->status,
                 $d->isOnline() ? 'Sí' : 'No',
                 $d->last_seen_at?->setTimezone($tz)->format('Y-m-d H:i'),

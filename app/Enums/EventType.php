@@ -16,6 +16,7 @@ enum EventType: string
     case DataUsage = 'data_usage';
     case SyncError = 'sync_error';
     case BumpAlert = 'bump_alert';
+    case TempPasswordUsed = 'temp_password_used';
 
     public function label(): string
     {
@@ -31,6 +32,7 @@ enum EventType: string
             self::DataUsage => 'Reporte de consumo',
             self::SyncError => 'Error de sincronización',
             self::BumpAlert => 'Aviso de tope',
+            self::TempPasswordUsed => 'Contraseña temporal usada',
         };
     }
 

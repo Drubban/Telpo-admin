@@ -53,7 +53,7 @@ class DeviceController extends Controller
     public function update(UpdateDeviceRequest $request, Device $device): JsonResponse
     {
         $data = $request->validated();
-        $before = $device->only(['unit_number', 'label', 'status']);
+        $before = $device->only(['unit_number', 'label', 'status', 'phone_number']);
 
         if (array_key_exists('unit_number', $data) && $data['unit_number'] !== $device->unit_number) {
             $device->unit_number = $data['unit_number'];
@@ -63,6 +63,10 @@ class DeviceController extends Controller
         if (array_key_exists('label', $data)) {
             $device->label = $data['label'];
         }
+        if (array_key_exists('phone_number', $data)) {
+            $device->phone_number = $data['phone_number'];
+            $device->phone_source = $data['phone_number'] === null ? null : 'manual';
+        }
         if (isset($data['status'])) {
             $device->status = $data['status'];
         }
@@ -70,7 +74,7 @@ class DeviceController extends Controller
 
         AuditLog::record('device_updated', $request->user()->id, $device->getRouteKey(), [
             'before' => $before,
-            'after' => $device->only(['unit_number', 'label', 'status']),
+            'after' => $device->only(['unit_number', 'label', 'status', 'phone_number']),
         ], $request->ip());
 
         return response()->json(['data' => (new DeviceResource($device))->resolve($request)]);
@@ -104,6 +108,45 @@ class DeviceController extends Controller
             'cycles' => array_map(fn (BillingCycle $c) => $c->toArray(), BillingCycle::recent()),
             'days' => $days,
             'total_bytes' => $previous,
+        ]);
+    }
+
+    /** Historial del semaforo de red (una muestra cada 10 min), por defecto de las ultimas 24 horas. */
+    public function signal(Device $device, Request $request): JsonResponse
+    {
+        $hours = min(72, max(1, (int) $request->query('hours', 24)));
+
+        $rows = DB::table('device_signal_samples')
+            ->where('device_id', $device->id)
+            ->where('sampled_at', '>=', CarbonImmutable::now('UTC')->subHours($hours)->format('Y-m-d H:i:s'))
+            ->orderBy('sampled_at')
+            ->get(['sampled_at', 'mobile', 'wifi', 'mobile_rtt_ms', 'wifi_rtt_ms', 'mobile_reason', 'wifi_reason']);
+
+        $samples = $rows->map(fn ($r) => [
+            'at' => CarbonImmutable::parse($r->sampled_at, 'UTC')->toIso8601String(),
+            'mobile' => (int) $r->mobile,
+            'wifi' => (int) $r->wifi,
+            'mobile_rtt_ms' => $r->mobile_rtt_ms === null ? null : (int) $r->mobile_rtt_ms,
+            'wifi_rtt_ms' => $r->wifi_rtt_ms === null ? null : (int) $r->wifi_rtt_ms,
+            'mobile_reason' => $r->mobile_reason,
+            'wifi_reason' => $r->wifi_reason,
+        ])->all();
+
+        $share = function (string $key) use ($rows): array {
+            $total = max(1, $rows->count());
+
+            return [
+                'ok' => round($rows->where($key, 0)->count() * 100 / $total, 1),
+                'unstable' => round($rows->where($key, 1)->count() * 100 / $total, 1),
+                'problem' => round($rows->where($key, 2)->count() * 100 / $total, 1),
+            ];
+        };
+
+        return response()->json([
+            'hours' => $hours,
+            'interval_minutes' => \App\Support\Signal::SAMPLE_INTERVAL_MINUTES,
+            'samples' => $samples,
+            'summary' => ['count' => $rows->count(), 'mobile' => $share('mobile'), 'wifi' => $share('wifi')],
         ]);
     }
 

@@ -24,6 +24,7 @@ class DeviceIndexRequest extends FormRequest
             'unit' => ['nullable', 'string', 'max:40'],
             'online' => ['nullable', Rule::in(['yes', 'no'])],
             'nfc' => ['nullable', Rule::in(['problem'])],
+            'signal' => ['nullable', Rule::in(['mobile', 'wifi'])],
             'cycle' => ['nullable', 'date_format:Y-m-d'],
             'band' => ['nullable', Rule::in(UsageBand::keys())],
             'sort' => ['nullable', Rule::in(self::SORTABLE)],
@@ -35,6 +36,6 @@ class DeviceIndexRequest extends FormRequest
     /** @return array<string, mixed> */
     public function filters(): array
     {
-        return $this->safe()->only(['q', 'status', 'unit', 'online', 'nfc']);
+        return $this->safe()->only(['q', 'status', 'unit', 'online', 'nfc', 'signal']);
     }
 }

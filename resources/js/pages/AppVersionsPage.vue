@@ -93,12 +93,13 @@ async function save() {
     <div v-if="error" class="alert error" role="alert">{{ error }} <button class="btn sm" @click="load">Reintentar</button></div>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Unidad</th><th>IMEI</th><th>Versión instalada</th><th>Estado</th><th>Revisada</th></tr></thead>
+            <thead><tr><th>Unidad</th><th>IMEI</th><th>Serie</th><th>Versión instalada</th><th>Estado</th><th>Revisada</th></tr></thead>
             <tbody>
-                <tr v-if="loading"><td colspan="5"><div class="skeleton"></div></td></tr>
+                <tr v-if="loading"><td colspan="6"><div class="skeleton"></div></td></tr>
                 <tr v-for="d in rows" v-else :key="d.id" class="clickable" @click="router.push({ name: 'device', params: { id: d.id } })">
                     <td><strong>{{ d.unit_number || '—' }}</strong></td>
                     <td class="mono">{{ d.imei || 'Sin IMEI' }}</td>
+                    <td class="mono">{{ d.serial || '—' }}</td>
                     <td>{{ d.billing_app.installed ? (d.billing_app.version || '?') + (d.billing_app.version_code !== null ? ` (${d.billing_app.version_code})` : '') : '—' }}</td>
                     <td><StatusBadge :kind="STATES[stateOf(d)][0]" :text="STATES[stateOf(d)][1]" /></td>
                     <td>{{ timeAgo(d.billing_app.checked_at) }}</td>

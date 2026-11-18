@@ -19,10 +19,14 @@ class PruneTelpoData extends Command
         // Los avisos de tope son muchos y solo sirven para control reciente: se conservan 120 dias.
         $bumpPasses = DeviceEvent::where('type', 'bump_alert')->where('occurred_at', '<', now()->subDays(120))->delete();
 
+        // Historial del semaforo de red: solo sirve para diagnostico reciente.
+        $signal = \Illuminate\Support\Facades\DB::table('device_signal_samples')
+            ->where('sampled_at', '<', now()->subDays(\App\Support\Signal::RETENTION_DAYS))->delete();
+
         $events = DeviceEvent::where('occurred_at', '<', $limit)->delete();
         $audit = AuditLog::where('created_at', '<', $limit)->delete();
 
-        $this->info("Avisos de tope borrados: {$bumpPasses}. Eventos borrados: {$events}. Bitacora borrada: {$audit}.");
+        $this->info("Avisos de tope borrados: {$bumpPasses}. Eventos borrados: {$events}. Bitacora borrada: {$audit}. Muestras de señal borradas: {$signal}.");
 
         return self::SUCCESS;
     }

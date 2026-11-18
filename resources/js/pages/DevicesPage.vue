@@ -7,12 +7,13 @@ import { formatBytes, timeAgo } from '../lib/format';
 import Modal from '../components/Modal.vue';
 import Pager from '../components/Pager.vue';
 import StatusBadge from '../components/StatusBadge.vue';
+import SignalDot from '../components/SignalDot.vue';
 import ExportModal from '../components/ExportModal.vue';
 
 const route = useRoute();
 const router = useRouter();
 const { filters, rows, meta, extra, loading, error, load, setPage, reset } = useList('/api/admin/devices', {
-    q: '', status: '', unit: '', online: '', nfc: route.query.nfc === 'problem' ? 'problem' : '',
+    q: '', status: '', unit: '', online: '', signal: '', nfc: route.query.nfc === 'problem' ? 'problem' : '',
     sort: 'unit_number', dir: 'asc', per_page: 15,
 });
 
@@ -78,6 +79,8 @@ const exportFilters = () => ({ q: filters.q, status: filters.status, unit: filte
             <select id="on" v-model="filters.online"><option value="">Todas</option><option value="yes">En línea</option><option value="no">Sin reportar</option></select></div>
         <div class="field"><label for="nfc">NFC / cámara</label>
             <select id="nfc" v-model="filters.nfc"><option value="">Todos</option><option value="problem">Con problema</option></select></div>
+        <div class="field"><label for="sg">Señal de red</label>
+            <select id="sg" v-model="filters.signal"><option value="">Todas</option><option value="mobile">Datos móviles con problema</option><option value="wifi">Wi-Fi con problema</option></select></div>
         <button class="btn" @click="reset">Limpiar</button>
     </div>
 
@@ -92,19 +95,27 @@ const exportFilters = () => ({ q: filters.q, status: filters.status, unit: filte
                     <th>Estado</th>
                     <th>NFC</th>
                     <th>Cámara</th>
+                    <th title="Revisión cada 10 minutos">Señal (datos · Wi-Fi)</th>
                     <th class="sortable" @click="sortBy('last_seen_at')">Última conexión{{ arrow('last_seen_at') }}</th>
                     <th class="sortable num" @click="sortBy('cycle_bytes')">Consumo del periodo{{ arrow('cycle_bytes') }}</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
-                <tr v-if="loading"><td colspan="8"><div class="skeleton"></div></td></tr>
+                <tr v-if="loading"><td colspan="9"><div class="skeleton"></div></td></tr>
                 <tr v-for="d in rows" v-else :key="d.id" class="clickable" @click="open(d)">
                     <td><strong>{{ d.unit_number || '—' }}</strong><div v-if="d.label" class="faint">{{ d.label }}</div></td>
                     <td class="mono">{{ d.imei || 'Sin IMEI' }}</td>
                     <td><StatusBadge :kind="statusInfo(d.status)[0]" :text="statusInfo(d.status)[1]" /> <StatusBadge v-if="d.online" kind="ok" text="En línea" /></td>
                     <td><StatusBadge v-if="d.nfc_enabled === null" text="Sin dato" /><StatusBadge v-else :kind="d.nfc_enabled ? 'ok' : 'bad'" :text="d.nfc_enabled ? 'Activo' : 'Apagado'" /></td>
                     <td><StatusBadge v-if="d.camera_ok === null" text="Sin dato" /><StatusBadge v-else :kind="d.camera_ok ? 'ok' : 'bad'" :text="d.camera_ok ? 'Disponible' : 'Bloqueada'" /></td>
+                    <td>
+                        <span class="sig-pair">
+                            <SignalDot compact :state="d.signal?.mobile ?? null" :reason="d.signal?.mobile_reason" label="Datos móviles" />
+                            <SignalDot compact :state="d.signal?.wifi ?? null" :reason="d.signal?.wifi_reason" label="Wi-Fi" />
+                        </span>
+                        <div class="faint" v-if="d.signal?.checked_at">{{ timeAgo(d.signal.checked_at) }}</div>
+                    </td>
                     <td>{{ timeAgo(d.last_seen_at) }}</td>
                     <td class="num">{{ formatBytes(d.cycle_bytes) }}</td>
                     <td @click.stop><button class="btn sm" @click="edit(d)">Editar</button></td>

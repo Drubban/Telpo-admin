@@ -18,6 +18,7 @@ class UpdateDeviceRequest extends FormRequest
         return [
             'unit_number' => ['nullable', 'string', 'max:40', 'regex:/^[\pL\pN _.\-\/#]+$/u'],
             'label' => ['nullable', 'string', 'max:80'],
+            'phone_number' => ['nullable', 'string', 'regex:/^\+?\d{7,15}$/'],
             'status' => ['sometimes', Rule::in(['active', 'inactive'])],
         ];
     }
@@ -25,6 +26,7 @@ class UpdateDeviceRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'phone_number.regex' => 'El teléfono debe llevar solo dígitos (7 a 15), con + opcional al inicio.',
             'unit_number.regex' => 'La unidad solo admite letras, números, espacios y - _ . / #',
         ];
     }

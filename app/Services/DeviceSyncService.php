@@ -10,6 +10,7 @@ use App\Models\UsageAlert;
 use App\Support\BillingCycle;
 use App\Support\BumpCatalog;
 use App\Support\Ms;
+use App\Support\Signal;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -29,6 +30,7 @@ class DeviceSyncService
     public function __construct(
         private readonly CredentialService $credentials,
         private readonly UsageAlertService $alerts,
+        private readonly TempCodeService $tempCodes,
     ) {}
 
     /**
@@ -50,8 +52,11 @@ class DeviceSyncService
                 ? $this->storeUsage($device, $payload['usage'], $now)
                 : 'none';
 
+            $signalAcked = $this->storeSignal($device, (array) ($payload['signal']['samples'] ?? []), $now);
+
             return [
                 'acked_events' => $acked,
+                'signal_acked_ms' => $signalAcked,
                 'usage' => $usageStatus,
                 'unit' => [
                     'number' => $device->unit_number,
@@ -78,6 +83,16 @@ class DeviceSyncService
         } catch (\Throwable $e) {
             report($e);
             $core['credentials'] = [];
+        }
+
+        // Llave de las contrasenas temporales: solo viaja si el equipo no tiene la version actual.
+        try {
+            $secret = $this->tempCodes->payloadFor($device, (int) ($payload['temp_secret_version'] ?? 0));
+            if ($secret !== null) {
+                $core['temp_secret'] = $secret;
+            }
+        } catch (\Throwable $e) {
+            report($e);
         }
 
         // Topes: la lista completa solo viaja si la version del equipo es distinta (unos pocos KB).
@@ -108,6 +123,35 @@ class DeviceSyncService
             if (array_key_exists($flag, $p) && $p[$flag] !== null) {
                 $device->{$flag} = (bool) $p[$flag];
             }
+        }
+
+        // Numero de la linea: si la Telpo lo pudo leer de la SIM, manda sobre el capturado a mano.
+        if (! empty($p['phone_number'])) {
+            $device->phone_number = $p['phone_number'];
+            $device->phone_source = 'sim';
+        }
+
+        // Consumo por aplicacion (solo las que mas gastaron; la Telpo ya manda la lista recortada).
+        if (isset($p['usage']['apps']) && is_array($p['usage']['apps'])) {
+            $apps = [];
+            foreach (array_slice($p['usage']['apps'], 0, 30) as $a) {
+                $apps[] = [
+                    'package' => (string) ($a['package'] ?? ''),
+                    'label' => (string) ($a['label'] ?? ''),
+                    'rx_bytes' => (int) ($a['rx_bytes'] ?? 0),
+                    'tx_bytes' => (int) ($a['tx_bytes'] ?? 0),
+                ];
+            }
+            $device->usage_breakdown = [
+                'period_start_ms' => (int) ($p['usage']['period_start_ms'] ?? 0),
+                'apps' => $apps,
+            ];
+            $device->usage_breakdown_at = $now;
+        }
+
+        // La Telpo avisa que version de la llave temporal tiene; asi la web sabe si ya puede usar codigos.
+        if (isset($p['temp_secret_version'])) {
+            $device->temp_secret_acked_version = min((int) $p['temp_secret_version'], (int) $device->temp_secret_version);
         }
 
         $imeiConflict = false;
@@ -156,6 +200,69 @@ class DeviceSyncService
         $device->save();
 
         return $imeiConflict;
+    }
+
+    /**
+     * Guarda las muestras del semaforo de red (una cada 10 min) y deja la mas reciente en el equipo.
+     *
+     * @param  array<int, mixed>  $samples
+     * @return int|null marca (ms) de la muestra mas reciente aceptada; la Telpo ya no reenvia hasta ahi
+     */
+    private function storeSignal(Device $device, array $samples, CarbonImmutable $now): ?int
+    {
+        $rows = [];
+        $latest = null;
+        $minMs = Ms::of($now->subDays(self::MAX_CLOCK_SKEW_DAYS));
+        $maxMs = Ms::of($now->addHour());
+
+        foreach ($samples as $s) {
+            if (! is_array($s) || ! isset($s['at_ms'], $s['mobile'], $s['wifi'])) {
+                continue;
+            }
+            $atMs = (int) $s['at_ms'];
+            if ($atMs < $minMs || $atMs > $maxMs) {
+                continue;
+            }
+            $at = CarbonImmutable::createFromTimestampMsUTC($atMs);
+            $reason = fn ($v) => in_array($v, Signal::REASONS, true) ? $v : null;
+            $rows[$atMs] = [
+                'device_id' => $device->id,
+                'sampled_at' => $at->format('Y-m-d H:i:s'),
+                'mobile' => max(0, min(2, (int) $s['mobile'])),
+                'wifi' => max(0, min(2, (int) $s['wifi'])),
+                'mobile_rtt_ms' => isset($s['mobile_rtt_ms']) ? (int) $s['mobile_rtt_ms'] : null,
+                'wifi_rtt_ms' => isset($s['wifi_rtt_ms']) ? (int) $s['wifi_rtt_ms'] : null,
+                'mobile_reason' => $reason($s['mobile_reason'] ?? null),
+                'wifi_reason' => $reason($s['wifi_reason'] ?? null),
+            ];
+            if ($latest === null || $atMs > $latest) {
+                $latest = $atMs;
+            }
+        }
+
+        if ($rows === []) {
+            return null;
+        }
+
+        DB::table('device_signal_samples')->upsert(
+            array_values($rows),
+            ['device_id', 'sampled_at'],
+            ['mobile', 'wifi', 'mobile_rtt_ms', 'wifi_rtt_ms', 'mobile_reason', 'wifi_reason'],
+        );
+
+        $newest = $rows[$latest];
+        $checkedAt = CarbonImmutable::createFromTimestampMsUTC($latest);
+        if ($device->signal_checked_at === null || $checkedAt->gt($device->signal_checked_at)) {
+            $device->forceFill([
+                'signal_mobile' => $newest['mobile'],
+                'signal_wifi' => $newest['wifi'],
+                'signal_mobile_reason' => $newest['mobile_reason'],
+                'signal_wifi_reason' => $newest['wifi_reason'],
+                'signal_checked_at' => $checkedAt,
+            ])->save();
+        }
+
+        return $latest;
     }
 
     /**

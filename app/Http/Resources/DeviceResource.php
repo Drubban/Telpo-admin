@@ -17,7 +17,24 @@ class DeviceResource extends JsonResource
             'unit_number' => $this->unit_number,
             'label' => $this->label,
             'serial' => $this->serial,
+            'phone_number' => $this->phone_number,
+            'phone_source' => $this->phone_source,
+            'usage_breakdown' => $this->usage_breakdown === null ? null : [
+                'period_start_ms' => $this->usage_breakdown['period_start_ms'] ?? null,
+                'apps' => $this->usage_breakdown['apps'] ?? [],
+                'reported_at' => $this->usage_breakdown_at?->toIso8601String(),
+            ],
             'model' => $this->model,
+            'signal' => [
+                'mobile' => $this->signal_mobile,
+                'mobile_reason' => $this->signal_mobile_reason,
+                'wifi' => $this->signal_wifi,
+                'wifi_reason' => $this->signal_wifi_reason,
+                'checked_at' => $this->signal_checked_at?->toIso8601String(),
+            ],
+            // La Telpo ya tiene la llave actual y puede validar contrasenas temporales sin conexion.
+            'temp_code_ready' => (int) $this->temp_secret_version > 0
+                && (int) $this->temp_secret_acked_version >= (int) $this->temp_secret_version,
             'status' => $this->status,
             'app_version' => $this->app_version,
             'nfc_enabled' => $this->nfc_enabled,

@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\DeviceController;
 use App\Http\Controllers\Admin\EventController;
 use App\Http\Controllers\Admin\ExportController;
 use App\Http\Controllers\Admin\SpeedBumpController;
+use App\Http\Controllers\Admin\TempCodeController;
 use App\Http\Controllers\Admin\UsageAlertController;
 use App\Http\Controllers\Admin\UsageController;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,11 @@ Route::prefix('api/admin')->group(function () {
         Route::patch('devices/{device}', [DeviceController::class, 'update']);
         Route::get('devices/{device}/usage', [DeviceController::class, 'usage']);
         Route::get('devices/{device}/bump-passes', DeviceBumpPassController::class);
+        Route::get('devices/{device}/signal', [DeviceController::class, 'signal']);
+
+        // Contrasenas temporales (15 min) para Configuracion y Reiniciar/Apagar.
+        Route::post('devices/{device}/temp-codes/{kind}', [TempCodeController::class, 'store'])
+            ->whereIn('kind', ['settings', 'power']);
 
         Route::get('usage', [UsageController::class, 'index']);
         Route::get('events', [EventController::class, 'index']);

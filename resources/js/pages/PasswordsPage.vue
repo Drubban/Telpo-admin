@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import api, { errorMessage, fieldErrors } from '../lib/api';
 import { formatDateTime } from '../lib/format';
 import Modal from '../components/Modal.vue';
@@ -34,6 +34,56 @@ async function load() {
     }
 }
 onMounted(load);
+
+// --- Contrasenas temporales (15 minutos) ---
+const devices = ref([]);
+const tempForm = ref({ device: '', kind: 'power' });
+const tempBusy = ref(false);
+const tempError = ref('');
+const tempResult = ref(null);
+const nowMs = ref(Date.now());
+let ticker = null;
+
+async function loadDevices() {
+    try {
+        const { data } = await api.get('/api/admin/devices', { params: { per_page: 100, status: 'active', sort: 'unit_number', dir: 'asc' } });
+        devices.value = data.data;
+    } catch (e) {
+        tempError.value = errorMessage(e, 'No se pudo cargar la lista de equipos.');
+    }
+}
+onMounted(() => {
+    loadDevices();
+    ticker = setInterval(() => { nowMs.value = Date.now(); }, 1000);
+});
+onBeforeUnmount(() => clearInterval(ticker));
+
+const selectedDevice = computed(() => devices.value.find((d) => d.id === tempForm.value.device) ?? null);
+const remainingMs = computed(() => (tempResult.value ? new Date(tempResult.value.expires_at).getTime() - nowMs.value : 0));
+const tempExpired = computed(() => tempResult.value !== null && remainingMs.value <= 0);
+const countdown = computed(() => {
+    const total = Math.max(0, Math.floor(remainingMs.value / 1000));
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+});
+const codeSpaced = computed(() => (tempResult.value ? tempResult.value.code.replace(/(\d{4})(\d{4})/, '$1 $2') : ''));
+const expiresClock = computed(() => (tempResult.value
+    ? new Date(tempResult.value.expires_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })
+    : ''));
+
+async function generateTemp() {
+    tempBusy.value = true;
+    tempError.value = '';
+    tempResult.value = null;
+    try {
+        const { data } = await api.post(`/api/admin/devices/${tempForm.value.device}/temp-codes/${tempForm.value.kind}`);
+        tempResult.value = data.data;
+        nowMs.value = Date.now();
+    } catch (e) {
+        tempError.value = errorMessage(e, 'No se pudo generar la contraseña temporal.');
+    } finally {
+        tempBusy.value = false;
+    }
+}
 
 function open(item) {
     editing.value = item;
@@ -82,6 +132,36 @@ async function save() {
     </div>
     <p v-if="loading && !items.length" class="empty">Cargando…</p>
 
+    <section class="card" style="margin-top:14px">
+        <header><h2>Contraseñas temporales (15 minutos)</h2></header>
+        <p class="muted">Genera un código para que un operador abra Configuración o use Reiniciar/Apagar sin conocer la contraseña fija. Sirve solo en el equipo elegido, solo para ese tipo, y deja de funcionar a los 15 minutos. La Telpo lo valida sin conexión.</p>
+        <div v-if="tempError" class="alert error" role="alert">{{ tempError }}</div>
+        <form class="filters" @submit.prevent="generateTemp">
+            <div class="field"><label for="tdev">Equipo</label>
+                <select id="tdev" v-model="tempForm.device" required>
+                    <option value="" disabled>Elige una unidad…</option>
+                    <option v-for="d in devices" :key="d.id" :value="d.id">{{ d.unit_number || 'Sin unidad' }} · {{ d.imei || 'sin IMEI' }}</option>
+                </select></div>
+            <div class="field"><label for="tkind">Para</label>
+                <select id="tkind" v-model="tempForm.kind"><option value="power">Reiniciar y apagar</option><option value="settings">Configuración del equipo</option></select></div>
+            <button class="btn primary" :disabled="tempBusy || !tempForm.device">{{ tempBusy ? 'Generando…' : 'Generar código' }}</button>
+        </form>
+        <div v-if="selectedDevice && !selectedDevice.temp_code_ready" class="alert" style="background:#fff4d6;color:#5c3d00;border:1px solid #c98a00" role="status">Esta Telpo aún no recibe su llave para contraseñas temporales. Debe sincronizar una vez (cada 15 minutos si tiene internet); hasta entonces el código no le servirá.</div>
+
+        <div v-if="tempResult" class="temp-box" :class="{ expired: tempExpired }" role="status" aria-live="polite">
+            <template v-if="!tempExpired">
+                <div class="temp-label">{{ tempResult.label }} · {{ selectedDevice?.unit_number || 'unidad' }}</div>
+                <div class="temp-code">{{ codeSpaced }}</div>
+                <div class="temp-meta">Vence a las {{ expiresClock }} · quedan <strong>{{ countdown }}</strong></div>
+                <div class="temp-meta" v-if="!tempResult.device_ready">La Telpo todavía no tiene la llave: este código no funcionará hasta que sincronice.</div>
+            </template>
+            <template v-else>
+                <div class="temp-label">Código vencido</div>
+                <div class="temp-meta">Ya no sirve. Genera uno nuevo si el operador lo necesita.</div>
+            </template>
+        </div>
+    </section>
+
     <Modal v-if="editing" :title="editing.label" @close="editing = null">
         <div v-if="formError" class="alert error" role="alert">{{ formError }}</div>
         <form id="pw-form" @submit.prevent="save" autocomplete="off">
@@ -95,3 +175,11 @@ async function save() {
         </template>
     </Modal>
 </template>
+
+<style scoped>
+.temp-box { margin-top: 14px; padding: 16px; border: 2px solid #1f9d4c; border-radius: 12px; text-align: center; }
+.temp-box.expired { border-color: #8a8f98; opacity: 0.8; }
+.temp-label { font-size: 14px; margin-bottom: 6px; }
+.temp-code { font-family: ui-monospace, Consolas, monospace; font-size: 40px; font-weight: 700; letter-spacing: 4px; }
+.temp-meta { font-size: 14px; margin-top: 6px; }
+</style>

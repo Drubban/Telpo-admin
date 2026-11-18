@@ -131,6 +131,11 @@ class DeviceSyncService
             $device->phone_source = 'sim';
         }
 
+        // ICCID de la SIM (el numero impreso en la tarjeta): sirve para buscar la linea en la plataforma del operador.
+        if (! empty($p['sim_iccid'])) {
+            $device->sim_iccid = $p['sim_iccid'];
+        }
+
         // Consumo por aplicacion (solo las que mas gastaron; la Telpo ya manda la lista recortada).
         if (isset($p['usage']['apps']) && is_array($p['usage']['apps'])) {
             $apps = [];

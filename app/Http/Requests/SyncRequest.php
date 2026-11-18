@@ -23,6 +23,7 @@ class SyncRequest extends FormRequest
             'unit_updated_at_ms' => ['nullable', 'integer', 'min:0'],
             'serial' => ['nullable', 'string', 'max:64'],
             'phone_number' => ['nullable', 'string', 'regex:/^\+?\d{7,15}$/'],
+            'sim_iccid' => ['nullable', 'string', 'regex:/^\d{18,22}$/'],
             'model' => ['nullable', 'string', 'max:64'],
             'app_version' => ['nullable', 'string', 'max:32'],
             'nfc_enabled' => ['nullable', 'boolean'],

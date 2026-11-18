@@ -19,6 +19,7 @@ class DeviceResource extends JsonResource
             'serial' => $this->serial,
             'phone_number' => $this->phone_number,
             'phone_source' => $this->phone_source,
+            'sim_iccid' => $this->sim_iccid,
             'usage_breakdown' => $this->usage_breakdown === null ? null : [
                 'period_start_ms' => $this->usage_breakdown['period_start_ms'] ?? null,
                 'apps' => $this->usage_breakdown['apps'] ?? [],

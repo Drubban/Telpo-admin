@@ -62,6 +62,10 @@ class WidgetSummaryTest extends TestCase
         $this->enrollWithUsage('U-2', 30);   // 83.3 %
         $this->enrollWithUsage('U-3', 37);   // 102.8 %
 
+        // withToken() de enrollWithUsage deja el Bearer del equipo en todas las peticiones
+        // siguientes; se limpia para que el widget use solo su propia clave.
+        $this->flushHeaders();
+
         $this->getJson('/api/v1/widget/summary?token=token-del-widget')
             ->assertOk()
             ->assertJsonPath('devices_total', 3)

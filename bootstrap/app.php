@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AuthenticateDevice;
+use App\Http\Middleware\AuthenticateWidget;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -16,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(SecurityHeaders::class);
-        $middleware->alias(['device' => AuthenticateDevice::class]);
+        $middleware->alias(['device' => AuthenticateDevice::class, 'widget' => AuthenticateWidget::class]);
 
         if ($proxies = env('TRUSTED_PROXIES')) {
             $middleware->trustProxies(at: $proxies === '*' ? '*' : array_map('trim', explode(',', $proxies)));

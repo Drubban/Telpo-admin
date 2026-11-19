@@ -26,6 +26,9 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(30)->by($token !== '' ? hash('sha256', $token) : $request->ip());
         });
 
+        // Widget de escritorio: consulta cada pocos minutos; 30/min por IP deja margen y frena abusos.
+        RateLimiter::for('widget', fn (Request $request) => Limit::perMinute(30)->by($request->ip()));
+
         // Peticiones del panel de administracion.
         RateLimiter::for('admin', fn (Request $request) => Limit::perMinute(240)->by($request->user()?->id ?: $request->ip()));
     }

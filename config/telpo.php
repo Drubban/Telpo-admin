@@ -73,6 +73,10 @@ return [
         'lng_max' => (float) env('TELPO_LNG_MAX', -86.0),
     ],
 
+    // Clave del resumen de solo lectura para widgets de escritorio (GET /api/v1/widget/summary).
+    // Vacio = ruta apagada. Genera una con: php -r "echo bin2hex(random_bytes(24));"
+    'widget_token' => env('TELPO_WIDGET_TOKEN'),
+
     // Limite de filas para exportar a PDF (CSV y XLSX no tienen limite practico).
     'pdf_max_rows' => 5000,
 ];

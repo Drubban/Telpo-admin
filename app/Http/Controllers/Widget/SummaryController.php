@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
  * Devuelve numeros planos y textos ya armados para que el cliente no tenga que procesar JSON
  * complejo: equipos en linea, unidades que pasan el 75/90/100 % del paquete de datos en el periodo
  * actual y unidades con la app de cobro desactualizada. No expone IMEI completos ni ids.
+ * El JSON va sin escapar acentos ni barras porque el cliente lo lee con expresiones regulares.
  */
 class SummaryController extends Controller
 {
@@ -86,7 +87,7 @@ class SummaryController extends Controller
             'billing_unknown' => $countState('unknown'),
             'billing_outdated_text' => $outdatedUnits->implode(', '),
             'generated_at' => now()->toIso8601String(),
-        ]);
+        ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     /** Nombre corto de la unidad: numero, etiqueta o los ultimos 6 digitos del IMEI. */
